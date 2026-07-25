@@ -18,19 +18,24 @@ package controller
 
 import (
 	"context"
+	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/go-logr/logr"
 	sanitizev1alpha1 "github.com/vmtlw/sanitize-operator/api/v1alpha1"
 )
 
 // SanitizerReconciler reconciles a Sanitizer object
 type SanitizerReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme     *runtime.Scheme
+	log        logr.Logger
+	schedulers map[types.NamespacedName]*CleanupScheduler
 }
 
 // +kubebuilder:rbac:groups=sanitize.sanitize.dev,resources=sanitizers,verbs=get;list;watch;create;update;patch;delete
@@ -39,23 +44,55 @@ type SanitizerReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Sanitizer object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/reconcile
 func (r *SanitizerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := r.log.WithValues("sanitizer", req.NamespacedName)
+	log.Info("Reconciling Sanitizer")
 
-	// TODO(user): your logic here
+	// Fetch the Sanitizer instance
+	sanitizer := &sanitizev1alpha1.Sanitizer{}
+	if err := r.Get(ctx, req.NamespacedName, sanitizer); err != nil {
+		log.Error(err, "Unable to fetch Sanitizer")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
 
-	return ctrl.Result{}, nil
+	// Initialize schedulers map if needed
+	if r.schedulers == nil {
+		r.schedulers = make(map[types.NamespacedName]*CleanupScheduler)
+	}
+
+	// Get or create scheduler for this Sanitizer
+	scheduler, exists := r.schedulers[req.NamespacedName]
+	if !exists {
+		log.Info("Creating new cleanup scheduler")
+		scheduler = NewCleanupScheduler(r.Client, req.NamespacedName)
+		r.schedulers[req.NamespacedName] = scheduler
+		scheduler.Start()
+	}
+
+	// Update scheduler with current schedule
+	if err := scheduler.UpdateSchedule(ctx, sanitizer.Spec.Schedule); err != nil {
+		log.Error(err, "Failed to update scheduler schedule")
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// Update status with last cleanup time
+	if !exists {
+		// Only update status if this is not the first reconciliation
+		sanitizer.Status.LastCleanupTime = &metav1.Time{Time: time.Now()}
+		if err := r.Status().Update(ctx, sanitizer); err != nil {
+			log.Error(err, "Failed to update Sanitizer status")
+			return ctrl.Result{}, err
+		}
+	}
+
+	log.Info("Sanitizer reconciliation completed successfully")
+	return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *SanitizerReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.log = ctrl.Log.WithName("controllers").WithName("Sanitizer")
+	r.schedulers = make(map[types.NamespacedName]*CleanupScheduler)
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sanitizev1alpha1.Sanitizer{}).
 		Named("sanitizer").

@@ -25,17 +25,16 @@ import (
 
 // SanitizerSpec defines the desired state of Sanitizer.
 type SanitizerSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// Foo is an example field of Sanitizer. Edit sanitizer_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Schedule defines the cron schedule for cleanup execution.
+	// +optional
+	Schedule string `json:"schedule,omitempty"`
 }
 
 // SanitizerStatus defines the observed state of Sanitizer.
 type SanitizerStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// LastCleanupTime records the last time cleanup was performed.
+	// +optional
+	LastCleanupTime *metav1.Time `json:"lastCleanupTime,omitempty"`
 }
 
 // +kubebuilder:object:root=true
