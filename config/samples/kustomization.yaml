@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- sanitize_v1alpha1_sanitizer.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples
