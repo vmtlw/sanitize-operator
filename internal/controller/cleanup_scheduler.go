@@ -3,17 +3,17 @@ package controller
 import (
 	"context"
 
+	logr "github.com/go-logr/logr"
 	"github.com/robfig/cron/v3"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // CleanupScheduler manages the periodic cleanup of completed pods.
 type CleanupScheduler struct {
 	client.Client
-	log          logf.LogSink
+	log          logr.Logger
 	sanitizerKey types.NamespacedName
 	scheduler    *cron.Cron
 	stop         chan struct{}
@@ -23,7 +23,7 @@ type CleanupScheduler struct {
 func NewCleanupScheduler(client client.Client, sanitizerKey types.NamespacedName) *CleanupScheduler {
 	return &CleanupScheduler{
 		Client:       client,
-		log:          logf.Log.WithName("cleanup_scheduler").WithValues("sanitizer", sanitizerKey),
+		log:          logr.Discard().WithName("cleanup_scheduler").WithValues("sanitizer", sanitizerKey),
 		sanitizerKey: sanitizerKey,
 		scheduler:    cron.New(),
 		stop:         make(chan struct{}),
