@@ -7,3 +7,5 @@ metadata:
   name: sanitizer-sample
 spec:
   # TODO(user): Add fields here
+  #schedule:
+  #lastCleanupTime:
